@@ -1,0 +1,15 @@
+# Ignore everything by default
+*
+
+# Track only personal configs
+!.gitignore
+!alacritty/
+!alacritty/**
+!fish/
+!fish/config.fish
+!fish/conf.d/
+!fish/conf.d/**
+!hypr/
+!hypr/**
+!waybar/
+!waybar/**
