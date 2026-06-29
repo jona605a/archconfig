@@ -9,6 +9,8 @@
 !fish/config.fish
 !fish/conf.d/
 !fish/conf.d/**
+!fish/functions/
+!fish/functions/**
 !hypr/
 !hypr/**
 !waybar/
