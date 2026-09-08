@@ -51,9 +51,30 @@
     },
 
     // Workspaces
+    //
+    // Hyprland 0.55 replaced hyprlang with lua, and `hyprctl dispatch` now
+    // takes a lua expression instead of a dispatcher name + positional args.
+    // The old `hyprctl dispatch workspace r-1` form is a lua PARSE error now:
+    //   error: [string "return hl.dispatch(workspace r-1)"]:1: ')' expected
+    // Hence the lua form in on-scroll-* below.
+    //
+    // KNOWN BROKEN: "on-click": "activate" does nothing on waybar 0.15.0.
+    // `activate` is not a shell command -- it's an undocumented special value
+    // handled inside waybar, which writes the pre-0.55 string straight to the
+    // Hyprland IPC socket (see `strings $(which waybar) | grep dispatch`), so
+    // it can't be fixed from this file. `move-to-monitor: true` is broken for
+    // the same reason (it emits `focusworkspaceoncurrentmonitor`).
+    // Fixed upstream by Alexays/Waybar PR #5013 (merged 2026-05-04) and #5231
+    // (2026-08-27), both landing AFTER the 0.15.0 release (2026-02-06); see
+    // issue #5198. Arch `extra` still ships 0.15.0.
+    // => Upgrading to waybar >= 0.16.0 (or waybar-git) should fix clicking with
+    //    NO change to this file: #5231 detects the compositor's config
+    //    language at runtime. The on-scroll-* lines below are plain shell
+    //    commands, so they keep working with a patched build too.
+    // Workarounds until then: scroll on this module, or SUPER + 1..0.
     "hyprland/workspaces" : {
-        "on-scroll-up": "hyprctl dispatch workspace r-1",
-        "on-scroll-down": "hyprctl dispatch workspace r+1",
+        "on-scroll-up": "hyprctl dispatch 'hl.dsp.focus({ workspace = \"r-1\" })'",
+        "on-scroll-down": "hyprctl dispatch 'hl.dsp.focus({ workspace = \"r+1\" })'",
         "on-click": "activate",
         "active-only": false,
         "all-outputs": true,
