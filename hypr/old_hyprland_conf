@@ -12,6 +12,8 @@ monitor=eDP-1, 2560x1600@165, 0x0,1  #,preferred,auto,auto
 #monitor=HDMI-A-1, 1920x1080@60, -1920x0, 1 #, mirror, eDP-2
 monitor=HDMI-A-1, 1920x1080@60, -1920x0, 1 #, mirror, eDP-2
 monitor=DP-1, 2560x1440@60, -2560x0, 1 #, mirror, eDP-2
+# Fallback for unlisted connectors (DP-9 is on the dGPU)
+monitor=,preferred,auto,auto
 
 
 $terminal = alacritty #kitty
@@ -39,12 +41,16 @@ exec-once = hyprctl setcursor Bibata-Modern-Ice 24
 env = XCURSOR_SIZE,24
 env = QT_QPA_PLATFORMTHEME,qt6ct
 env = ELECTRON_OZONE_PLATFORM_HINT,auto
-# Nvidia env vars (aquamarine backend, RTX 5070 on card2/eDP-1)
-env = AQ_DRM_DEVICES,/dev/dri/card2
-env = LIBVA_DRIVER_NAME,nvidia
+# card2 = AMD iGPU (eDP-1), card1 = NVIDIA dGPU (DP-9).
+# List both or external outputs are invisible; first entry renders.
+# env = AQ_DRM_DEVICES,/dev/dri/card2 # old
+env = AQ_DRM_DEVICES,/dev/dri/card2:/dev/dri/card1
+# Needs libva-nvidia-driver (not installed); the override also stops
+# libva from auto-selecting radeonsi.
+# env = LIBVA_DRIVER_NAME,nvidia # old
 env = XDG_SESSION_TYPE,wayland
 env = __GLX_VENDOR_LIBRARY_NAME,nvidia
-env = NVD_BACKEND,direct
+# env = NVD_BACKEND,direct # old
 
 input {
     kb_layout = dk
