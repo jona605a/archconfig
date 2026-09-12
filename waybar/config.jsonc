@@ -8,7 +8,8 @@
     "spacing": 0,
 
     "output": [
-        "eDP-1"
+        "eDP-1",
+        "eDP-2"
     ],
 
     // ── Layout ────────────────────────────────────────────────────────────────
@@ -22,7 +23,7 @@
     ],
 
     "modules-right": [
-        // "custom/updates",
+        "custom/updates",
         "pulseaudio",
         "bluetooth",
         "battery",
@@ -179,16 +180,16 @@
         // START CLOCK FORMAT
         "format-alt": "{:%Y-%m-%d}"
         // END CLOCK FORMAT
-    }
+    },
 
-    // // Updates Count
-    // "custom/updates": {
-    //     "format": "   {}",
-    //     "escape": true,
-    //     "return-type": "json",
-    //     "exec": "~/dotfiles/scripts/updates.sh",
-    //     "restart-interval": 60,
-    //     "on-click": "$(cat ~/dotfiles/.settings/terminal.sh) --class dotfiles-floating -e ~/dotfiles/scripts/installupdates.sh",
-    //     "on-click-right": "~/dotfiles/.settings/software.sh"
-    // },    
+    // Updates Count
+    "custom/updates": {
+        "format": "   {}",
+        "escape": true,
+        "return-type": "json",
+        "exec": "~/dotfiles/scripts/updates.sh",
+        "restart-interval": 60,
+        "on-click": "$(cat ~/dotfiles/.settings/terminal.sh) --class dotfiles-floating -e ~/dotfiles/scripts/installupdates.sh",
+        "on-click-right": "~/dotfiles/.settings/software.sh"
+    }
 }
