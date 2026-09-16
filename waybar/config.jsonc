@@ -121,7 +121,20 @@
     },
 
     // Battery
+    //
+    // CRASH FIX: without "bat", this module watches every directory under
+    // /sys/class/power_supply/, which includes hidpp_battery_N -- the battery
+    // of the Bluetooth MX Master 3S. That node appears and disappears each time
+    // the mouse (re)connects, and waybar loses the race: its udev worker thread
+    // sees the new directory, calls inotify_add_watch() on <dir>/uevent, gets
+    // ENOENT because the device is already gone, and throws std::runtime_error
+    // ("Could not watch events for ...") from a thread with no catch handler
+    // => std::terminate => SIGABRT, whole bar gone. Naming the battery makes
+    // refreshBatteries() skip hidpp nodes before it ever adds the watch.
+    // Verified in waybar 0.15.0-3: the "bat" check is at +0xd04dd, the
+    // inotify_add_watch at +0xd0a34.
     "battery": {
+        "bat": "BAT1",
         "states": {
             // "good": 95,
             "warning": 30,
