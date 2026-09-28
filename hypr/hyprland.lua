@@ -26,6 +26,20 @@ hl.monitor({ output = "desc:BOE NE160QDM-NZ6", mode = "2560x1600@165", position 
 -- Fallback for unlisted connectors (DP-9 is on the dGPU)
 hl.monitor({ output = "", mode = "preferred", position = "auto", scale = 1 })
 
+-- External outputs on the NVIDIA dGPU sometimes stay black after a hotplug
+-- (power cut / replug) even though they show up as active. Cycling DPMS on
+-- just that output reinitialises the multi-GPU blit and brings it back.
+hl.on("monitor.added", function(mon)
+    local name = mon and mon.name
+    if not name or name:match("^eDP") then return end
+    hl.timer(function()
+        hl.dispatch(hl.dsp.dpms({ action = "off", monitor = name }))
+        hl.timer(function()
+            hl.dispatch(hl.dsp.dpms({ action = "on", monitor = name }))
+        end, { timeout = 500, type = "oneshot" })
+    end, { timeout = 1500, type = "oneshot" })
+end)
+
 
 ---------------------
 ---- MY PROGRAMS ----
