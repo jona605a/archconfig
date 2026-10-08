@@ -1,5 +1,5 @@
-function worknix --wraps='cd ~/work/nobodywho/nobodywho/; nix develop' --description 'cd to nobodywho and enter the nix devshell, with host GPU drivers usable'
-    cd ~/work/nobodywho/nobodywho/
+function worknix --wraps='cd ~/work/nobodywho/; nix develop' --description 'cd to nobodywho and enter the nix devshell, with host GPU drivers usable'
+    cd ~/work/nobodywho/
 
     # The devshell needs Arch's Vulkan drivers (llama.cpp falls back to CPU
     # without them), but Nix's ld.so neither searches /usr/lib nor reads
