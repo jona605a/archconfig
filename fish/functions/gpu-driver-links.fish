@@ -1,67 +1,81 @@
-function gpu-driver-links --description 'Build a dir of symlinks to the host GPU driver libs, safe to append to LD_LIBRARY_PATH inside a Nix shell. Prints the dir. Pass -f to force a rebuild.'
+function gpu-driver-links --description 'Build a dir of symlinks to the host NVIDIA driver libs, safe to append to LD_LIBRARY_PATH inside a Nix shell. Prints the dir. Pass -f to force a rebuild.'
     set -l dir $XDG_CACHE_HOME
     test -n "$dir"; or set dir $HOME/.cache
     set dir $dir/gpu-driver-links
 
-    # Libs we must NEVER shadow: everything glibc ships, plus the C++/GCC runtime.
-    #
-    # Nix binaries run under Nix's ld.so, and LD_LIBRARY_PATH outranks their
-    # DT_RUNPATH -- so exposing Arch's libc.so.6 here kills every dynamically
-    # linked program in the shell with
+    # Keep this dir as SMALL as possible. Every lib in it outranks the
+    # DT_RUNPATH of every Nix binary in the shell (LD_LIBRARY_PATH always wins
+    # over RUNPATH, appended or not), so anything we expose replaces Nix's copy
+    # of the same soname. Arch libs built against a newer glibc than the
+    # devshell's then die with e.g.
     #   undefined symbol: __pointer_chk_guard, version GLIBC_PRIVATE
-    # (the symbol moved into ld.so in glibc 2.43; Nix's ld.so is older).
-    # Keeping this set narrow is the whole point: exposing all of /usr/lib also
-    # breaks e.g. gradle, because Arch's libgnutls wants GLIBC_2.43.
+    #   version `GLIBC_2.44' not found
+    #
+    # So: NVIDIA only. NVIDIA's libs are built against ancient glibc on purpose
+    # and are safe; their only outside deps are the X11/xcb client libs.
+    # Mesa (the AMD iGPU) is deliberately left out: RADV needs Arch's libLLVM,
+    # which needs Arch's glibc, so it can't load in the devshell anyway -- and
+    # exposing it dragged in libz/libzstd/libicu/libncursesw/... for nothing.
+    set -l keep_external '^lib(X11|X11-xcb|Xext|Xau|Xdmcp|xcb(-[a-z0-9]+)?)\.so'
     set -l excl '^(libc|libm|libdl|libpthread|librt|libresolv|libutil|libanl|libthread_db|libgcc_s|libstdc\+\+|libnss_[^.]*|ld-linux.*)\.so'
+    set -l icd /usr/share/vulkan/icd.d/nvidia_icd.json
 
-    # Rebuild only when the host drivers change.
-    set -l stamp (pacman -Q mesa nvidia-utils vulkan-icd-loader 2>/dev/null | string join ' ')
-    test -n "$stamp"; or set stamp (stat -c '%Y' /usr/lib /usr/share/vulkan/icd.d 2>/dev/null | string join ' ')
+    if not pacman -Q nvidia-utils >/dev/null 2>&1
+        echo "gpu-driver-links: nvidia-utils not installed; no driver libs to link" >&2
+        return 1
+    end
+
+    # Rebuild only when the driver or its deps change.
+    set -l stamp (pacman -Q nvidia-utils libx11 libxext libxcb 2>/dev/null | string join ' ')
     if test "$argv[1]" != -f; and test -f $dir/.stamp
-        set -l old (cat $dir/.stamp)
-        if test "$old" = "$stamp"
+        if test "$(cat $dir/.stamp)" = "$stamp"
             echo $dir
             return 0
         end
     end
 
-    # Probe: let the HOST loader load every driver the system advertises, and
-    # record what it actually pulled in. Derived beats hand-listed -- the NVIDIA
-    # stack dlopens libs no ldd can see (glvkspirv, rtcore, allocator, xcb-glx),
-    # and without them libGLX_nvidia loads but exposes no vkCreateInstance, so
-    # the GPU silently vanishes. Re-probing means driver updates need no edits here.
-    # LD_LIBRARY_PATH is cleared so the probe can't be skewed by a Nix shell.
-    set -l libs
-    if test -x /usr/bin/vulkaninfo
-        set libs (env -u LD_LIBRARY_PATH LD_DEBUG=libs /usr/bin/vulkaninfo --summary 2>&1 >/dev/null |
-                  string match -gr 'calling init: (/usr/lib/\S+)' | sort -u)
-    end
+    # 1. Everything nvidia-utils ships as a shared lib. Covers the libs the
+    #    driver dlopens (rtcore, glvkspirv, allocator, ...) that no ldd sees.
+    #    Minus the confidential-computing pkcs11 module, which links Arch's
+    #    openssl/zlib/zstd/brotli.
+    set -l libs (pacman -Qlq nvidia-utils | string match -r '^/usr/lib/lib[^/]*\.so[.0-9]*$' |
+                 string match -rv '/libnvidia-pkcs11')
 
-    if test -z "$libs"
-        # No probe available (vulkan-tools missing?). Fall back to the link-time
-        # closure of the advertised drivers plus the families they dlopen.
-        echo "gpu-driver-links: no vulkaninfo to probe with, falling back to a static list" >&2
-        for j in /usr/share/vulkan/icd.d/*.json
-            for lp in (cat $j | string replace -rf '.*"library_path"[^"]*"([^"]+)".*' '$1')
-                string match -q '/*' -- $lp; and set -a libs $lp; or set -a libs /usr/lib/$lp
-            end
-        end
-        for d in $libs
-            test -e $d; and set -a libs (ldd $d 2>/dev/null | string match -gr '=> (/usr/lib/\S+)')
-        end
-        set -a libs (find /usr/lib -maxdepth 1 \( -name 'libnvidia-*' -o -name 'libcuda.so*' \
-            -o -name 'libdrm*' -o -name 'libVkLayer_*' -o -name 'libxcb*' -o -name 'libX11*' \
-            -o -name 'libdbus-1.so*' -o -name 'libsystemd.so*' -o -name 'libEGL*' -o -name 'libGL*' \) 2>/dev/null)
+    # 2. Outside deps, restricted to X11/xcb client libs. Link-time ones via
+    #    ldd, plus the ones the driver dlopens (xcb-glx/dri3/present/sync,
+    #    X11-xcb), found by letting the HOST loader bring up just the NVIDIA
+    #    ICD. Without those, libGLX_nvidia loads but exposes no
+    #    vkCreateInstance and the GPU silently vanishes.
+    set -l ext
+    for l in $libs
+        set -a ext (env -u LD_LIBRARY_PATH ldd $l 2>/dev/null | string match -gr '=> (/usr/lib/\S+)')
+    end
+    if test -x /usr/bin/vulkaninfo
+        set -a ext (env -u LD_LIBRARY_PATH VK_DRIVER_FILES=$icd VK_LOADER_LAYERS_DISABLE='VK_LAYER_MESA_*' \
+                    LD_DEBUG=libs /usr/bin/vulkaninfo --summary 2>&1 >/dev/null |
+                    string match -gr 'calling init: (/usr/lib/\S+)')
+    else
+        echo "gpu-driver-links: no vulkaninfo to probe with, using a static xcb list" >&2
+        set -a ext /usr/lib/lib{X11-xcb.so.1,xcb-dri3.so.0,xcb-glx.so.0,xcb-present.so.0,xcb-sync.so.1}
+    end
+    for l in $ext
+        string match -qr $keep_external -- (path basename $l); and set -a libs $l
     end
 
     set -l tmp $dir.new.$fish_pid
     rm -rf $tmp $dir
     mkdir -p $tmp
-    for lib in $libs
+    for lib in (printf '%s\n' $libs | sort -u)
         test -e $lib; or continue
         set -l base (path basename $lib)
         string match -qr $excl -- $base; and continue
         ln -sf $lib $tmp/$base
+    end
+    # NVIDIA's implicit Vulkan layers only, for VK_IMPLICIT_LAYER_PATH, so the
+    # loader never tries Mesa's (whose libs aren't, and can't be, in here).
+    mkdir $tmp/implicit_layer.d
+    for j in (pacman -Qlq nvidia-utils | string match -r '^/usr/share/vulkan/implicit_layer\.d/.*\.json$')
+        ln -sf $j $tmp/implicit_layer.d/
     end
     echo "$stamp" >$tmp/.stamp
     mv $tmp $dir

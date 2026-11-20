@@ -18,7 +18,10 @@
 -- See https://wiki.hypr.land/configuring/core/monitors/
 hl.monitor({ output = "eDP-1",    mode = "2560x1600@165", position = "0x0",     scale = 1 })
 hl.monitor({ output = "HDMI-A-1", mode = "1920x1080@60",  position = "-1920x0", scale = 1 })
-hl.monitor({ output = "DP-1",     mode = "2560x1440@60",  position = "auto", scale = 1 })
+-- Dell matched by description: it's DP-1 on the dGPU ports but DP-8 on the
+-- iGPU ports. 120Hz needs an iGPU port; Hyprland picks the closest mode if
+-- the dGPU port only offers 60.
+hl.monitor({ output = "desc:Dell Inc. DELL U2724DE DY67684", mode = "2560x1440@120", position = "auto", scale = 1 })
 -- Older laptop's panel; matched by description since it enumerates as eDP-2
 -- there instead of eDP-1.
 hl.monitor({ output = "desc:BOE 0x0B45", mode = "1920x1200@144", position = "0x0", scale = 1 })
